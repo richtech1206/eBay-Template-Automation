@@ -3,6 +3,9 @@
 ## Description
 The eBay 3D Seller Template Generator is a desktop application designed to automate the process of creating product listings for eBay, particularly tailored for vendors who need to merge data from multiple sources into a single eBay-compatible upload format. The application supports loading multiple types of files (CSV, XLSX, ZIP), enabling users to compile comprehensive listings that include SKUs, titles, descriptions, categories, images, and other necessary eBay listing attributes.
 
+## Video Preview
+[![Video Preview](Py-eBay-Template-Automation.png)](https://autobuffy-ebay.s3.eu-north-1.amazonaws.com/Detroit+Axle/Py-eBay-Template-Automation.mp4)
+
 ## Features
 - **Multi-File Input**: Accepts vendor items files, competitor files, PIES files, and category ID mappings.
 - **Support for Multiple Formats**: Handles CSV and XLSX files directly and can extract from ZIP archives containing multiple XLSX files.

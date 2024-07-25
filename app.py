@@ -127,10 +127,15 @@ class eBayTemplateGenerator:
                     for filename in z.namelist():
                         if filename.endswith('.xlsx'):
                             with z.open(filename) as f:
-                                sheet_data = pd.read_excel(f, sheet_name=None)
+                                sheet_data = pd.read_excel(f, sheet_name=None, engine='openpyxl')
                                 for sheet_name in sheet_data:
                                     normalized_sheet_name = sheet_name.lower().replace(' ', '')
-                                    pies_data[normalized_sheet_name] = sheet_data[sheet_name].rename(columns=lambda x: x.lower().replace(' ', ''))
+                                    if normalized_sheet_name not in pies_data:
+                                        pies_data[normalized_sheet_name] = sheet_data[sheet_name].rename(columns=lambda x: x.lower().replace(' ', ''))
+                                    else:
+                                        pies_data[normalized_sheet_name] = pd.concat([pies_data[normalized_sheet_name], sheet_data[sheet_name].rename(columns=lambda x: x.lower().replace(' ', ''))])
+
+
 
             category_id_mapping = pd.read_csv(self.category_id_file)
             category_id_mapping.columns = category_id_mapping.columns.str.lower().str.replace(' ', '')  # Normalize column names to lowercase and remove spaces
@@ -196,7 +201,7 @@ class eBayTemplateGenerator:
             separated_attributes = [flattened_attributes[i:i + chunk_size] for i in range(0, len(flattened_attributes), chunk_size)]
 
             # If the last chunk is smaller than chunk_size, pad it with empty tuples
-            if len(separated_attributes[-1]) < chunk_size:
+            if separated_attributes[-1] and len(separated_attributes[-1]) < chunk_size:
                 separated_attributes[-1].extend([('', '')] * (chunk_size - len(separated_attributes[-1])))
 
             # Collect rows for the output DataFrame
@@ -369,7 +374,7 @@ class eBayTemplateGenerator:
                         attr_name, attr_value = '', ''
                     new_row[attr_name_col] = attr_name
                     new_row[attr_value_col] = attr_value
-                print(new_row)
+                print(f'{new_row}\n')
                 rows.append(new_row)
             
             # Create the DataFrame from rows

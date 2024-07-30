@@ -3,7 +3,6 @@ from tkinter import filedialog, messagebox
 import pandas as pd
 from datetime import datetime
 import zipfile
-import io
 
 class eBayTemplateGenerator:
     def __init__(self, root):
@@ -108,9 +107,24 @@ class eBayTemplateGenerator:
         if self.image_list_file:
             self.image_list_label.config(text=self.image_list_file.split("/")[-1])
             messagebox.showinfo("File Loaded", "Image List File Loaded Successfully")
-            
+
+    def get_max_attribute_count(self, attributes_segment):
+        # Group by partnumber and count the occurrences of each
+        attribute_counts = attributes_segment.groupby('partnumber').size().reset_index(name='count')
+        # Find the maximum count of attributes for any part number
+        max_count = attribute_counts['count'].max()
+        return max_count
+
+    def get_attributes_for_sku(self, sku, attributes_segment):
+        sku_attributes = attributes_segment[attributes_segment['partnumber'] == sku]
+        attributes_dict = {}
+        for idx, (_, row) in enumerate(sku_attributes.iterrows()):
+            attributes_dict[f'Attribute{idx+1}Name'] = row['attributename']
+            attributes_dict[f'Attribute{idx+1}Value'] = row['productattribute']
+        return attributes_dict
+
     def generate_template(self):
-        # try:
+        try:
             # Read the source files
             vendor_items = pd.read_csv(self.vendor_items_file)
             vendor_items.columns = vendor_items.columns.str.lower().str.replace(' ', '')  # Normalize column names to lowercase and remove spaces
@@ -120,14 +134,14 @@ class eBayTemplateGenerator:
             
             pies_data = {}
             if self.pies_file_type.get() == "single":
-                pies_data = pd.read_excel(self.pies_file, sheet_name=None)
+                pies_data = pd.read_excel(self.pies_file, sheet_name=None, dtype=str)
                 pies_data = {sheet_name.lower().replace(' ', ''): pies_data[sheet_name].rename(columns=lambda x: x.lower().replace(' ', '')) for sheet_name in pies_data}  # Normalize sheet names and column names to lowercase and remove spaces
             elif self.pies_file_type.get() == "zip":
                 with zipfile.ZipFile(self.pies_file, 'r') as z:
                     for filename in z.namelist():
                         if filename.endswith('.xlsx'):
                             with z.open(filename) as f:
-                                sheet_data = pd.read_excel(f, sheet_name=None, engine='openpyxl')
+                                sheet_data = pd.read_excel(f, sheet_name=None, engine='openpyxl', dtype=str)
                                 for sheet_name in sheet_data:
                                     normalized_sheet_name = sheet_name.lower().replace(' ', '')
                                     if normalized_sheet_name not in pies_data:
@@ -135,15 +149,23 @@ class eBayTemplateGenerator:
                                     else:
                                         pies_data[normalized_sheet_name] = pd.concat([pies_data[normalized_sheet_name], sheet_data[sheet_name].rename(columns=lambda x: x.lower().replace(' ', ''))])
 
-
-
             category_id_mapping = pd.read_csv(self.category_id_file)
             category_id_mapping.columns = category_id_mapping.columns.str.lower().str.replace(' ', '')  # Normalize column names to lowercase and remove spaces
             
             image_list = pd.read_csv(self.image_list_file)
             image_list.columns = image_list.columns.str.lower().str.replace(' ', '')  # Normalize column names to lowercase and remove spaces
             
-            # Initialize the output DataFrame
+            # Aggregate all attributes with their values
+            description_segment = pies_data['descriptionsegment']
+            pies_template = pies_data['piestemplate']
+            report_segment = pies_data['report']
+            attributes_segment = pies_data['productattributessegment']
+            interchange_segment = pies_data['partinterchangesegment']
+            
+            # Get the maximum attribute count
+            max_attribute_count = self.get_max_attribute_count(attributes_segment)
+            
+            # Initialize the output DataFrame with the correct column order
             template_columns = [
                 'Item ID', 'SKU', 'Parent SKU', 'Title', 'Description', 'Tags', 'MetaKeywords', 'MetaDescription', 'MobileDescription',
                 'CategoryID', 'CategoryID2', 'StoreCategory', 'StoreCategory2', 'eBayCatalogID', 'eBayCatalogSearch', 'PromoteCampaign', 
@@ -151,143 +173,126 @@ class eBayTemplateGenerator:
                 'CarCompatibilityNotes', 'DeleteCarCompatibility', 'KType (TecDoc)', 'PrivateListing', 'Quantity', 'WarehouseQuantity', 
                 'InventoryControl', 'Price', 'WholesalePrice', 'OriginalRetailPrice', 'BestOffer', 'BestOfferAccept', 'BestOfferDecline', 
                 'VATPercent', 'ListingDuration', 'AuctionStartPrice', 'AuctionReservePrice', 'AuctionBINPrice', 'Condition', 'ConditionNote', 
-                'C:ASIN', 'C:UPC', 'C:EAN', 'C:MPN', 'C:Brand', 'C:Manufacturer', 'C:Size', 'C:Color', 'C:Material', 'C:Product Type', 
-                'Attribute1Name', 'Attribute1Value', 'Attribute2Name', 'Attribute2Value', 'Attribute3Name', 'Attribute3Value', 
-                'Attribute4Name', 'Attribute4Value', 'Attribute5Name', 'Attribute5Value', 'Attribute6Name', 'Attribute6Value', 
-                'Attribute7Name', 'Attribute7Value', 'Attribute8Name', 'Attribute8Value', 'Attribute9Name', 'Attribute9Value', 
-                'Attribute10Name', 'Attribute10Value', 'Attribute11Name', 'Attribute11Value', 'Attribute12Name', 'Attribute12Value', 
-                'Attribute13Name', 'Attribute13Value', 'Attribute14Name', 'Attribute14Value', 'Attribute15Name', 'Attribute15Value', 
-                'Attribute16Name', 'Attribute16Value', 'Attribute17Name', 'Attribute17Value', 'Attribute18Name', 'Attribute18Value', 
-                'Attribute19Name', 'Attribute19Value', 'Attribute20Name', 'Attribute20Value', 'Attribute21Name', 'Attribute21Value', 
-                'Attribute22Name', 'Attribute22Value', 'Attribute23Name', 'Attribute23Value', 'Attribute24Name', 'Attribute24Value', 
-                'Attribute25Name', 'Attribute25Value', 'Attribute26Name', 'Attribute26Value', 'Attribute27Name', 'Attribute27Value', 
-                'Attribute28Name', 'Attribute28Value', 'Attribute29Name', 'Attribute29Value', 'Attribute30Name', 'Attribute30Value', 
-                'CountryCode', 'Location', 'PostalCode', 'PolicyPayment', 'PolicyShipping', 'PolicyReturn', 'PackageType', 
-                'MeasurementSystem', 'PackageLength', 'PackageWidth', 'PackageDepth', 'WeightMajor', 'WeightMinor', 'ImageURLs'
+                'C:ASIN', 'C:UPC', 'C:EAN', 'C:MPN', 'C:Brand', 'C:Manufacturer', 'C:Size', 'C:Color', 'C:Material'
             ]
-            # Add additional image columns up to Image10
-            for i in range(1, 11):
-                template_columns.append(f'Image {i}')
-            
+
+            # Add dynamic attribute columns based on the maximum attribute count
+            for i in range(1, max_attribute_count + 1):
+                template_columns.append(f'Attribute{i}Name')
+                template_columns.append(f'Attribute{i}Value')
+
+            # Continue with the rest of the columns
+            template_columns += [
+                'CountryCode', 'Location', 'PostalCode', 'PolicyPayment', 'PolicyShipping', 'PolicyReturn', 'PackageType', 'MeasurementSystem', 
+                'PackageLength', 'PackageWidth', 'PackageDepth', 'WeightMajor', 'WeightMinor', 'ImageURLs', 'Image 1', 'Image 2', 
+                'Image 3', 'Image 4', 'Image 5', 'Image 6', 'Image 7', 'Image 8', 'Image 9', 'Image 10', 'VariationImageOption', 
+                'VariationImage 1', 'VariationImage 2', 'VariationImage 3', 'DeleteVariation'
+            ]
+
             brand_name = self.brand_name.get()
             
-            # Aggregate all attributes with their values
-            description_segment = pies_data['descriptionsegment']
-            pies_template = pies_data['piestemplate']
-            report_segment = pies_data['report']
-            attributes_segment = pies_data['productattributessegment']
+            # Add a column for the count of each attribute name
+            attributes_segment['attribute_count'] = attributes_segment.groupby('attributename')['attributename'].transform('count')
+
+            # Sort by the count and then by the attribute name
+            attributes_segment = attributes_segment.sort_values(by=['attribute_count', 'attributename'], ascending=[False, True])
+
+            # Drop the temporary count column if no longer needed
+            attributes_segment = attributes_segment.drop(columns=['attribute_count'])
             
-            # Get the list of all SKUs from vendor items
-            all_skus = vendor_items['partnumber'].tolist()
-
-            # Add attributes to the new_row dictionary
-            attr_rows = attributes_segment[attributes_segment['partnumber'].isin(all_skus)]
-            attributes = {}
-            for _, attr_row in attr_rows.iterrows():
-                attr_name = attr_row['attributename']
-                attr_value = attr_row['productattribute']
-                if attr_name in attributes:
-                    attributes[attr_name].append(attr_value)
-                else:
-                    attributes[attr_name] = [attr_value]
-
-            # Flatten the attributes dictionary to have a single list of key-value pairs
-            flattened_attributes = []
-            for attr_name, attr_values in attributes.items():
-                flattened_attributes.extend([(attr_name, attr_value) for attr_value in attr_values])
-
-            # Separate flattened_attributes into several parts with the same length as all_skus
-            chunk_size = len(all_skus)
-            separated_attributes = [flattened_attributes[i:i + chunk_size] for i in range(0, len(flattened_attributes), chunk_size)]
-
-            # If the last chunk is smaller than chunk_size, pad it with empty tuples
-            if separated_attributes[-1] and len(separated_attributes[-1]) < chunk_size:
-                separated_attributes[-1].extend([('', '')] * (chunk_size - len(separated_attributes[-1])))
-
             # Collect rows for the output DataFrame
             rows = []
 
+            # Create dictionary mappings for faster lookup
+            competitor_data_dict = {row['partnumber']: row for _, row in competitor_data.iterrows()}
+            
+            description_segment_dict = {}
+            # Iterate through the rows and process descriptions
+            for _, row in description_segment.iterrows():
+                partnumber = row['partnumber']
+                description = row['description']
+                if partnumber not in description_segment_dict:
+                    description_segment_dict[partnumber] = []
+                if description not in description_segment_dict[partnumber]:
+                    description_segment_dict[partnumber].append(description)
+
+            # Convert sets to concatenated strings
+            description_segment_dict = {k: ', '.join(v) for k, v in description_segment_dict.items()}
+            
+            # Initialize an empty dictionary to store interchange part numbers
+            interchange_segment_dict = {}
+
+            # Iterate through the rows and process interchange part numbers
+            for _, row in interchange_segment.iterrows():
+                item_partnumber = row['item_partnumber']
+                partnumber = row['partnumber']
+                if item_partnumber not in interchange_segment_dict:
+                    interchange_segment_dict[item_partnumber] = []
+                interchange_segment_dict[item_partnumber].append(partnumber)
+                
+            # Convert lists to concatenated strings with comma separation
+            interchange_segment_dict = {k: ', '.join(v) for k, v in interchange_segment_dict.items()}
+            
+            report_segment_dict = {row['partnumber']: row for _, row in report_segment.iterrows()}
+            pies_template_dict = {row['partnumber']: row for _, row in pies_template.iterrows()}
+            image_list_dict = image_list.groupby('partnumber').apply(lambda x: x.sort_values('sortorder')['url'].tolist()).to_dict()
+            category_id_mapping_dict = category_id_mapping.set_index('partterminologyname')['category_id'].to_dict()
+            
             for idx, row in vendor_items.iterrows():
                 sku = row['partnumber']
                 
                 # Initialize fields
-                title = condition_code = quantity = price = copycarcompatibility = None
-                
-                # Get data from competitor files
-                competitor_row = competitor_data[competitor_data['partnumber'] == sku]
-                if not competitor_row.empty:
-                    title = competitor_row['title'].values[0]
-                    condition_code = competitor_row['conditioncode'].values[0]
-                    quantity = competitor_row['quantity'].values[0]
-                    price = competitor_row['price'].values[0]
-                    copycarcompatibility = competitor_row['copycarcompatabilityid'].values[0]
-                
-                # Set default values if none found
-                title = title if title else 'N/A'
-                condition_code = condition_code if condition_code else 'N/A'
-                quantity = quantity if quantity else 'N/A'
-                price = price if price else 'N/A'
-                copycarcompatibility = copycarcompatibility if copycarcompatibility else 'N/A'
+                competitor_row = competitor_data_dict.get(sku, {})
+                title = competitor_row.get('title', 'N/A')
+                condition_code = competitor_row.get('conditioncode', 'N/A')
+                quantity = competitor_row.get('quantity', 'N/A')
+                price = competitor_row.get('price', 'N/A')
+                copycarcompatibility = competitor_row.get('copycarcompatabilityid', 'N/A')
                 
                 # Description
-                des_rows = description_segment[description_segment['partnumber'] == sku]
-                descriptions = des_rows['description'].astype(str).tolist()
-                description = ', '.join(descriptions)
+                description = description_segment_dict.get(sku, 'N/A')
+                
+                # Interchange Numbers
+                interchange_numbers = interchange_segment_dict.get(sku, 'N/A')
+                
+                description = f'{description}. Interchanges are: {interchange_numbers}'
                 
                 # Tags
                 tags = f"{brand_name} - {datetime.now().strftime('%Y-%m-%d')}"
                 
                 # CategoryID
-                part_terminology_rows = pies_template[pies_template['partnumber'] == sku]
-                if not part_terminology_rows.empty:
-                    part_terminology = part_terminology_rows['partterminologyname'].values[0]
-                    category_id = category_id_mapping.loc[category_id_mapping['partterminologyname'] == part_terminology, 'category_id']
-                    category_id = category_id.values[0] if not category_id.empty else '#N/A'
-                else:
-                    category_id = '#N/A'
+                part_terminology = pies_template_dict.get(sku, {}).get('partterminologyname', 'N/A')
+                category_id = category_id_mapping_dict.get(part_terminology, '#N/A')
                     
                 # Product Type
-                product_type_rows = report_segment[report_segment['partnumber'] == sku]
-                if not product_type_rows.empty:
-                    product_type = product_type_rows['partterminologyname'].values[0]
-                else:
-                    product_type = 'N/A'
+                product_type = report_segment_dict.get(sku, {}).get('partterminologyname', 'N/A')
                     
-                # UPC
-                gtin_rows = pies_template[pies_template['partnumber'] == sku]
-                if not gtin_rows.empty:
-                    gtin = gtin_rows['itemlevelgtin'].values[0]
-                    upc = str(gtin)[2:] if pd.notna(gtin) else 'N/A'
-                else:
-                    upc = 'N/A'
+                # Ensure 'itemlevelgtin' column is treated as string
+                upc = pies_template_dict.get(sku, {}).get('itemlevelgtin', 'N/A')
+                if upc != 'N/A':
+                    upc = upc[2:]
                 
                 # Brand
                 brand = brand_name
                 
                 # Package Dimensions and Weight
-                package_rows = report_segment[report_segment['partnumber'] == sku]
-                if not package_rows.empty:
-                    package_length = package_rows['length(in)'].values[0]
-                    package_width = package_rows['width(in)'].values[0]
-                    package_depth = package_rows['height(in)'].values[0]
-                else:
-                    package_length = package_width = package_depth = 'N/A'
-                
-                weight_major_rows = report_segment[report_segment['partnumber'] == sku]
-                if not weight_major_rows.empty:
-                    weight_major = weight_major_rows['weight(lbs)'].values[0]
-                else:
-                    weight_major = 'N/A'                            
+                package_row = report_segment_dict.get(sku, {})
+                package_length = package_row.get('length(in)', 'N/A')
+                package_width = package_row.get('width(in)', 'N/A')
+                package_depth = package_row.get('height(in)', 'N/A')
+                weight_major = package_row.get('weight(lbs)', 'N/A')
                 
                 # C:MPN, C:Brand, C:Manufacturer
-                c_mpn = row['partnumber']
-                c_brand = row['linecode']
-                c_manufacturer = row['linecode']
+                c_mpn = sku
+                c_brand = brand
+                c_manufacturer = brand
                 
                 # Get image URLs
-                image_rows = image_list[image_list['partnumber'] == sku]
-                image_urls = image_rows.sort_values('sortorder')['url'].tolist()
+                image_urls = image_list_dict.get(sku.replace("-", ''), [])
                 image_urls_dict = {f'Image {i+1}': url for i, url in enumerate(image_urls)}
+                
+                # Get all attribute names and values for the SKU
+                attributes_for_sku = self.get_attributes_for_sku(sku, attributes_segment)
                 
                 # Prepare new row
                 new_row = {
@@ -359,33 +364,22 @@ class eBayTemplateGenerator:
                     'WeightMajor': weight_major,
                     'WeightMinor': '',
                     'ImageURLs': '',
-                    **image_urls_dict
+                    **image_urls_dict,
+                    **attributes_for_sku  # Add all attribute names and values
                 }
                 
-                # Add attribute name and value pairs to the new_row dictionary
-                for i, attr_chunk in enumerate(separated_attributes, start=1):
-                    if i > 30:  # Limit to 30 attributes to match the column names in the template
-                        break
-                    attr_name_col = f'Attribute{i}Name'
-                    attr_value_col = f'Attribute{i}Value'
-                    if idx < len(attr_chunk):  # Ensure index is within the chunk's range
-                        attr_name, attr_value = attr_chunk[idx]
-                    else:
-                        attr_name, attr_value = '', ''
-                    new_row[attr_name_col] = attr_name
-                    new_row[attr_value_col] = attr_value
                 print(f'{new_row}\n')
                 rows.append(new_row)
-            
+
             # Create the DataFrame from rows
-            template_df = pd.DataFrame(rows)
+            template_df = pd.DataFrame(rows, columns=template_columns)
             
             # Save the result to an Excel file
             output_file = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
             template_df.to_excel(output_file, index=False)
             messagebox.showinfo("Success", "3D Seller Template Generated Successfully")
-        # except Exception as e:
-        #     messagebox.showerror("Error", f"An error occurred: {str(e)}")
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
             
 if __name__ == "__main__":
     root = tk.Tk()
